@@ -1,5 +1,4 @@
 "use strict";
-
 (function (window) {
   var version = '0.0.1';
   var wood;
@@ -39,6 +38,8 @@
     sort: Array.prototype.sort,
     reduce: Array.prototype.reduce,
     indexOf: Array.prototype.indexOf,
+    every: Array.prototype.every,
+    some: Array.prototype.some,
     toString: Object.prototype.toString(),
     typeOf: function (obj) {
       return obj === null ? String(obj) : class2type[this.toString.call(obj)] || 'object';
@@ -209,7 +210,7 @@
         }
         container = containerMap[name];
         container.innerHTML = html;
-        dom = util.forEach(util.slice.call(container.childNodes), function (item) {
+        dom = util.forEach.call(util.slice.call(container.childNodes), function (item) {
           container.removeChild(item);
         });
       }
@@ -223,6 +224,12 @@
             $node.attr(key, props[key]);
           }
         }
+      }
+    },
+    traverseNode: function (node, callback) {
+      callback(node);
+      for (var i = 0, len = node.childNodes.length; i < len; i++) {
+        this.traverseNode(ndoe.childNodes[i], callback);
       }
     }
   };
@@ -244,8 +251,172 @@
     return target;
   };
 
-  $.fn = {
+  $.each = function (elementList, callback) {
+    var i, key;
+    if (util.isArrayLike(elementList)) {
+      for (i = 0; i < elementList.length, i++) {
+        if (callback.call(elementList[i], i) === false) {
+          return elementList;
+        }
+      }
+    } else {
+      for (key in elementList) {
+        if (callback.call(elementList[key], key) === false) {
+          return elementList;
+        }
+      }
+    }
+    return elementList;
+  };
 
+  $.contains = document.documentElement.contains ?
+    function (parent, node) {
+      return parent !== node && parent.contains(node)
+    } :
+    function (parent, node) {
+      while (node && (node = node.parentNode)) {
+        if (node === parent) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+  $.map = function (elementList, callback) {
+    var item, itemList, i, key;
+    if (util.isArrayLike(elementList)) {
+      for (i = 0; i < elementList.length, i++) {
+        item = callback(elementList[i], i);
+        if (item !== null) {
+          itemList.push(item);
+        }
+      }
+    } else {
+      for (key in elementList) {
+        item = callback(elementList[key], key);
+        if (item !== null) {
+          itemList.push(item);
+        }
+      }
+    }
+    return itemList;
+  };
+
+  $.fn = {
+    constructor: wood.build,
+    forEach: util.forEach,
+    reduce: util.reduce,
+    push: util.push,
+    sort: util.sort,
+    splice: util.splice,
+    indexOf: util.indexOf,
+    map: function (callback) {
+      return $($.map(this, function (item, index) {
+        return callback.call(item, index);
+      }));
+    },
+    each: function (callback) {
+      util.every.call(this, function (item, index) {
+        return callback.call(item, index) !== false;
+      });
+      return this;
+    },
+    filter: function (selector) {
+      if (util.isFunction(selector)) {
+        return this.not(this.not(selector));
+      }
+      return $(util.filter.call(this, function (item) {
+        return zepto.matches(item, selector);
+      }));
+    },
+    length: 0,
+    ready: function (callback) {
+      //需要为IE检测document.body已经存在
+      if (regex.ready.test(document.readyState) && document.body) {
+        callback($);
+      } else {
+        document.addEventListener('DOMContentLoaded', function () {
+          callback($);
+        }, false);
+      }
+      return this;
+    },
+    get: function (index) {
+      return index === undefined ? util.slice.call(this) : this[index >= 0 ? index : index + this.length];
+    },
+    toArray: function () {
+      return this.get();
+    },
+    size: function () {
+      return this.length;
+    },
+    remove: function (callback) {
+      return this.each(function (item, index) {
+        if (item.parentNode !== null) {
+          item.parentNode.removeChild(item);
+        }
+      });
+    },
+    is: function (selector) {
+      return this.length > 0 && wood.matches(this[0], selector);
+    },
+    not: function (selector) {
+      var nodeList = [];
+      if (util.isFunction(selector)) {
+        //TODO
+        this.each(function (item) {
+          if (!selector.call(this, item)) {
+            nodeList.push(item);
+          }
+        });
+      } else {
+        var excludeList;
+        if (typeof selector === 'string') {
+          excludeList = this.filter(selector);
+        } else {
+          excludeList = util.isArrayLike(selector) && util.isFunction(selector) ? util.slice(selector) : $(selector);
+        }
+        this.forEach(function (item) {
+          if (excludeList.indexOf(item) < 0) {
+            nodes.push(item);
+          }
+        });
+      }
+      return $(nodeList);
+    },
+    has: function (selector) {
+      return this.filter(function () {
+        return util.isObject(selector) ? $.contains(this, selector) : $(this).find(selector).size();
+      });
+    },
+    eq: function (index) {
+      return this.slice(index, + index + 1);
+    },
+    first: function () {
+      var elem = this[0];
+      return elem && util.isObject(elem) ? elem : $(elem);
+    },
+    last: function () {
+      var elem = this[this.length - 1];
+      return elem && util.isObject(elem) ? elem : $(elem);
+    },
+    find: function (selector) {
+      var self = this;
+      if (!selector) {
+        return $();
+      } else if (typeof selector === 'object') {
+        return $(selector).filter(function () {
+          var node = this;
+          return util.some.call(self, function (parent) {
+            return $.contains(parent, node);
+          });
+        });
+      } else if (this.length === 1) {
+        return $(wood.qsa(this[0], selector));
+      } else {
+
+      }
+    }
   };
 
   wood.build.prototype = wood.generateWood.prototype = $.fn;
