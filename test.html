@@ -6,9 +6,15 @@
 </head>
 <body>
   <div id="aaa"></div>
-  <script type="text/javascript" src="wood.js"></script>
+  <!--<script type="text/javascript" src="wood.js"></script>-->
   <script type="text/javascript">
-    console.log($('#aa'));
+    var a = [1, 2, 3];
+    var b = a.every(function (item, index) {
+        if (item === 3) {
+          return true;
+        }
+    });
+    console.log(b);
   </script>
 </body>
 </html>

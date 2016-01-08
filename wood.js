@@ -78,6 +78,11 @@
         return item !== null;
       });
     },
+    uniq: function (arr) {
+      return this.filter.call(arr, function (item, index) {
+        return arr.indexOf(item) === index;
+      });
+    },
     extend: function (target, source, isDeep) {
       var key;
       for (key in source) {
@@ -134,9 +139,9 @@
       return this.build(dom, selector);
     },
     build: function (dom, selector) {
-      return new this.generateWood(dom, selector);
+      return new this.model(dom, selector);
     },
-    generateWood: function (dom, selector) {
+    model: function (dom, selector) {
       var i;
       var len = dom ? dom.length : 0;
       for (i = 0; i < len; i++) {
@@ -146,7 +151,7 @@
       this.selector = selector || '';
     },
     isWood: function (obj) {
-      return obj instanceof this.generateWood;
+      return obj instanceof this.model;
     },
     matches: function (element, selector) {
       if (!element || !selector || (element.nodeType !== 1)) {
@@ -229,7 +234,7 @@
     traverseNode: function (node, callback) {
       callback(node);
       for (var i = 0, len = node.childNodes.length; i < len; i++) {
-        this.traverseNode(ndoe.childNodes[i], callback);
+        this.traverseNode(node.childNodes[i], callback);
       }
     }
   };
@@ -254,7 +259,7 @@
   $.each = function (elementList, callback) {
     var i, key;
     if (util.isArrayLike(elementList)) {
-      for (i = 0; i < elementList.length, i++) {
+      for (i = 0; i < elementList.length; i++) {
         if (callback.call(elementList[i], i) === false) {
           return elementList;
         }
@@ -285,7 +290,7 @@
   $.map = function (elementList, callback) {
     var item, itemList, i, key;
     if (util.isArrayLike(elementList)) {
-      for (i = 0; i < elementList.length, i++) {
+      for (i = 0; i < elementList.length; i++) {
         item = callback(elementList[i], i);
         if (item !== null) {
           itemList.push(item);
@@ -300,6 +305,20 @@
       }
     }
     return itemList;
+  };
+
+  $.filtered = function (nodeList, selector) {
+    return selector === null ? $(nodeList) : $(nodes).filter(selector);
+  };
+
+  $.children = function (element) {
+    return 'children' in element ?
+        slice.call(element.children) :
+        $.map(element.childNodes, function (node) {
+          if (node.nodeType === 1) {
+              return node;
+          }
+        });
   };
 
   $.fn = {
@@ -328,6 +347,11 @@
       return $(util.filter.call(this, function (item) {
         return zepto.matches(item, selector);
       }));
+    },
+    pluck: function (prop) {
+      return $.map(this, function (element) {
+        return element[prop];
+      });
     },
     length: 0,
     ready: function (callback) {
@@ -414,12 +438,260 @@
       } else if (this.length === 1) {
         return $(wood.qsa(this[0], selector));
       } else {
-
+        return this.map(function () {
+          return wood.qsa(this, selector);
+        });
       }
+    },
+    closest: function (selector, context){
+      var node = this[0];
+      var collection = false;
+      if (typeof node === 'object') {
+        collection = $(selector);
+      }
+      while (node && !(collection ? collection.indexOf(node) >= 0 : wood.matches(node, selector))) {
+        node = node !== context && ! util.isDocument(node) && node.parentNode;
+      }
+      return $(node);
+    },
+    parents: function (selector) {
+      var ancestorList = [];
+      var nodeList = this;
+      while (nodeList.length > 0) {
+        nodeList = $.map(nodeList, function (item) {
+          if ((item = node.parentNode) && !util.isDocument(item) && ancestorList.indexOf(item) === -1) {
+            ancestorList.push(item);
+            return item;
+          }
+        });
+      }
+      return $.filtered(ancestorList, selector);
+    },
+    parent: function (selector) {
+      return $.filtered(util.uniq(this.pluck('parentNode')), selector);
+    },
+    children: function (selector) {
+      return $.filtered(this.map(function () {
+        return $.children(this);
+      }), selector);
+    },
+    contents: function () {
+      return this.map(function () {
+        return this.contentDocument || util.slice.call(this.childNodes);
+      });
+    },
+    siblings: function (selector) {
+      return $.filtered(this.map(function (index, element) {
+        return util.filter.call($.children(element.parentNode), function (child) {
+          return child !== element;
+        });
+      }), selector);
+    },
+    empty: function () {
+      return this.each(function (item) {
+        item.innerHTML = '';
+      });
+    },
+    replaceWith: function (content) {
+      return this.before(content).remove();
+    },
+    clone: function () {
+      return this.map(function (item) {
+        return item.cloneNode(true);
+      });
+    },
+    prev: function (selector) {
+      return $(this.pluck('previousElementSibling')).filter(selector || '');
+    },
+    next: function (selector) {
+      return $(this.pluck('nextElementSibling')).filter(selector || '');
+    },
+    append: function () {
+      var argType;
+      var nodeList = $.map(arguments, function (item) {
+        argType = util.typeOf(item);
+        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
+      });
+      var parent;
+      var copyByClone = this.length > 1;
+      if (nodeList.length < 1) {
+        return this;
+      }
+      return this.each(function (_, target) {
+        parent = target;
+        target = null;
+        var parentInDocument = $.contains(document.documentElement, parent);
+        nodeList.forEach(function (node) {
+          if (copyByClone) {
+            node = node.cloneNode(true);
+          } else if (!parent) {
+            return $(node).remove();
+          }
+          parent.insertBefore(node, target);
+          if (parentInDocument) {
+            wood.traverseNode(node, function (element) {
+              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
+                window['eval'].call(window, element.innerHTML);
+              }
+            });
+          }
+        });
+      });
+    },
+    appendTo: function (html) {
+      $(html).append(this);
+      return this;
+    },
+    prepend: function () {
+      var argType;
+      var nodeList = $.map(arguments, function (item) {
+        argType = util.typeOf(item);
+        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
+      });
+      var parent;
+      var copyByClone = this.length > 1;
+      if (nodeList.length < 1) {
+        return this;
+      }
+      return this.each(function (_, target) {
+        parent = target;
+        target = target.firstChild;
+        var parentInDocument = $.contains(document.documentElement, parent);
+        nodeList.forEach(function (node) {
+          if (copyByClone) {
+            node = node.cloneNode(true);
+          } else if (!parent) {
+            return $(node).remove();
+          }
+          parent.insertBefore(node, target);
+          if (parentInDocument) {
+            wood.traverseNode(node, function (element) {
+              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
+                window['eval'].call(window, element.innerHTML);
+              }
+            });
+          }
+        });
+      });
+    },
+    prependTo: function (html){
+      $(html).prepend(this);
+      return this;
+    },
+    after: function () {
+      var argType;
+      var nodeList = $.map(arguments, function (item) {
+        argType = util.typeOf(item);
+        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
+      });
+      var parent;
+      var copyByClone = this.length > 1;
+      if (nodeList.length < 1) {
+        return this;
+      }
+      return this.each(function (_, target) {
+        parent = target.parentNode;
+        target = target.nextSibling;
+        var parentInDocument = $.contains(document.documentElement, parent);
+        nodeList.forEach(function (node) {
+          if (copyByClone) {
+            node = node.cloneNode(true);
+          } else if (!parent) {
+            return $(node).remove();
+          }
+          parent.insertBefore(node, target);
+          if (parentInDocument) {
+            wood.traverseNode(node, function (element) {
+              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
+                window['eval'].call(window, element.innerHTML);
+              }
+            });
+          }
+        });
+      });
+    },
+    insertAfter: function (html) {
+      $(html).after(this);
+      return this;
+    },
+    before: function () {
+      var argType;
+      var nodeList = $.map(arguments, function (item) {
+        argType = util.typeOf(item);
+        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
+      });
+      var parent;
+      var copyByClone = this.length > 1;
+      if (nodeList.length < 1) {
+        return this;
+      }
+      return this.each(function (_, target) {
+        parent = target.parentNode;
+        var parentInDocument = $.contains(document.documentElement, parent);
+        nodeList.forEach(function (node) {
+          if (copyByClone) {
+            node = node.cloneNode(true);
+          } else if (!parent) {
+            return $(node).remove();
+          }
+          parent.insertBefore(node, target);
+          if (parentInDocument) {
+            wood.traverseNode(node, function (element) {
+              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
+                window['eval'].call(window, element.innerHTML);
+              }
+            });
+          }
+        });
+      });
+    },
+    insertBefore: function (html) {
+      $(html).before(this);
+      return this;
+    },
+    wrap: function (structure) {
+      var func = util.isFunction(structure);
+      if (this[0] && !func) {
+        var dom = $(structure).get(0);
+        var clone = dom.parentNode || this.length > 1;
+        return this.each(function (index) {
+          if (func) {
+            $(this).wrapAll(structure.call(this, index));
+          } else {
+            $(this).wrapAll(clone ? dom.cloneNode(true) : dom);
+          }
+        });
+      }
+    },
+    wrapAll: function (structure) {
+      if (this[0]) {
+        $(this[0]).before(structure = $(structure));
+        var children;
+        while ((children = structure.children()).length) {
+          structure = children.first();
+        }
+        $(structure).append(this);
+      }
+      return this;
+    },
+    wrapInner: function (structure) {
+      var func = util.isFunction(structure);
+      return this.each(function (index) {
+        var $self = $(this);
+        var contents = $self.contents();
+        var dom = func ? structure.call(this, index) : structure;
+        contents.length ? contents.wrapAll(dom) : $self.append(dom);
+      });
+    },
+    unWrap: function () {
+      this.parent().each(function () {
+        var $self = $(this);
+        $self.replaceWith($self.children());
+      });
     }
   };
 
-  wood.build.prototype = wood.generateWood.prototype = $.fn;
+  wood.build.prototype = wood.model.prototype = $.fn;
   $.wood = wood;
 
   window.WOOD = wood;
