@@ -13,7 +13,8 @@
     '*': document.createElement('div')
   };
   var attrMethodList = ['val', 'css', 'html', 'text', 'data', 'width', 'height', 'offset'];
-  var init = (function () {
+
+  (function () {
     classList.forEach(function (item) {
       class2type['[object '+ item +']'] = item.toLowerCase();
     });
@@ -21,9 +22,9 @@
 
   var regex = {
     simpleSelector: /^[\w-]*$/,
-    fragment: /^\s*<(\w+|!)[^>]*>/,
-    singleTag: /^<(\w+\s*\/?)(?:<\/\1>|)$/,
-    tagExpander: /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/ig,
+    fragment: /^\s*<(\w+|!)[^>]*>/, //<!---->、<div>、<div />...
+    singleTag: /^<(\w+\s*\/?)(?:<\/\1>|)$/,  //<div></div>、<br />...
+    tagExpander: /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w]+)[^>]*)\/>/ig, //<div />、<a />...
     ready: /complete|loaded|interactive/
   };
 
@@ -40,7 +41,7 @@
     indexOf: Array.prototype.indexOf,
     every: Array.prototype.every,
     some: Array.prototype.some,
-    toString: Object.prototype.toString(),
+    toString: Object.prototype.toString,
     typeOf: function (obj) {
       return obj === null ? String(obj) : class2type[this.toString.call(obj)] || 'object';
     },
@@ -48,7 +49,7 @@
       return obj !== null && obj === obj.window;
     },
     isDocument: function (obj) {
-      //DOCUMENT_NODE 9,nodeType 9
+      //DOCUMENT_NODE 9, nodeType 9
       return obj !== null && obj.nodeType === obj.DOCUMENT_NODE;
     },
     isFunction: function (obj) {
@@ -73,12 +74,12 @@
     isArray: function (obj) {
       return Array.isArray ? Array.isArray(obj) : obj instanceof Array;
     },
-    compact: function (arr) {
+    compact: function (arr) { //压缩数组，去除空元素null，返回压缩后的数组
       return this.filter.call(arr, function (item) {
         return item !== null;
       });
     },
-    uniq: function (arr) {
+    uniq: function (arr) { //数组去重，利用indexOf一直从左向右遍历,去除重复的元素，返回去重后的数组
       return this.filter.call(arr, function (item, index) {
         return arr.indexOf(item) === index;
       });
@@ -86,17 +87,17 @@
     extend: function (target, source, isDeep) {
       var key;
       for (key in source) {
-        if (!isDeep && (source[key] !== undefined)) {
+        if (isDeep && (this.isPlainObject(source[key]) || this.isArray(source[key]))) {
+          if (this.isPlainObject(source[key]) && !this.isPlainObject(target[key])) {
+            target[key] = {};
+          }
+          if (this.isArray(source[key]) && !this.isArray(target[key])) {
+            target[key] = [];
+          }
+          this.extend(target[key], source[key], isDeep);
+        } else if (source[key] !== undefined) {
           target[key] = source[key];
-          continue;
         }
-        if (isDeep && this.isPlainObject(source[key] && !this.isPlainObject(target[key]))) {
-          target[key] = {};
-        }
-        if (isDeep && this.isArray(source[key] && !this.isArray(target[key]))) {
-          target[key] = [];
-        }
-        this.extend(target[key], source[key], isDeep);
       }
       return target;
     }
@@ -105,30 +106,30 @@
   wood = {
     init: function (selector, context) {
       var dom;
-      if (!selector) {
+      if (!selector) { //无参调用时，返回空wood对象
         this.build();
-      } else if (typeof selector === 'string') {
+      } else if (typeof selector === 'string') { //传入字符串时
         selector = selector.trim();
-        if (selector[0] === '<' && regex.fragment.test(selector)) {
+        if (selector[0] === '<' && regex.fragment.test(selector)) { //<div />、 <a />、 <!---->、 <a>
           dom = this.fragment(selector, RegExp.$1, context);
           selector = null;
         } else if (context !== undefined) {
           return $(context).find(selector);
-        } else {
+        } else { //通用查询，如id，class等
           dom = this.qsa(document, selector);
         }
-      } else if (util.isFunction(selector)) {
+      } else if (util.isFunction(selector)) { //传入函数时
         return $(document).ready(selector);
-      } else if (this.isWood(selector)) {
+      } else if (this.isWood(selector)) { //传入wood对象时
         return selector;
-      } else {
+      } else { //当传入数组，数字，正则等时
         if (util.isArray(selector)) {
           dom = util.compact(selector);
         } else if (util.isObject(selector)) {
           dom = [selector];
           selector = null;
         } else if (regex.fragment.test(selector)) {
-          dom = this.fragment(selector.trim(), RegExp.$1, context);
+          dom = this.fragment(selector.trim(), RegExp.$1, context); //此时context为节点属性对象
           selector = null;
         } else if (context !== undefined) {
           return $(context).find(selector);
@@ -153,11 +154,10 @@
     isWood: function (obj) {
       return obj instanceof this.model;
     },
-    matches: function (element, selector) {
+    matches: function (element, selector) {//检测dom元素是否匹配某css selector
       if (!element || !selector || (element.nodeType !== 1)) {
         return false;
       }
-      //检测dom元素是否匹配某css selector
       var matchesSelector = element.matchesSelector ||
         element.webkitMatchesSelector ||
         element.mozMatchesSelector ||
@@ -172,11 +172,18 @@
         parent = gTempParent;
         parent.appendChild(element);
       }
-      //~ 先取反再减一，如：~-1 === 0
-      matchedIndex = ~(wood.qsa(parent, selector).indexOf(element));
+      matchedIndex = ~(wood.qsa(parent, selector).indexOf(element)); //~ 先取反再减一，如：~-1 === 0
       isNotExist && gTempParent.removeChild(element);
       return matchedIndex;
     },
+    /**
+     * dom查询核心
+     * 返回指定容器下所有符合css selector的所有节点
+     *
+     * @param {Object} element 容器节点
+     * @param selector 样式选择器
+     * @returns {NodeList}
+     */
     qsa: function (element, selector) {
       var temp;
       var isId = selector[0] === '#';
@@ -198,6 +205,14 @@
         }
       }
     },
+    /**
+     * 根据html文本，生成dom元素
+     * 当使用html文本时，dom结构不能为多层
+     *
+     * @param html html文本
+     * @param name 标签名
+     * @param {Object} props 节点属性
+     */
     fragment: function (html, name, props) {
       var dom, $node, container;
       if (regex.singleTag.test(html)) {
@@ -205,33 +220,35 @@
       }
       if (!dom) {
         if (html.replace) {
-          html = html.replace(regex.tagExpander, '<$1></$1>')
+          html = html.replace(regex.tagExpander, '<$2></$2>')
         }
         if (name === undefined) {
           name = regex.fragment.test(html) && RegExp.$1;
         }
-        if (!(name in containerMap)) {
-          name = '*';
+        if (!(name in containerMap)) { //针对td,tr,toby,*等作特殊处理
+          name = '*'; //统一生成div
         }
         container = containerMap[name];
         container.innerHTML = html;
-        dom = util.forEach.call(util.slice.call(container.childNodes), function (item) {
-          container.removeChild(item);
+        dom = $.each.call(util.slice.call(container.childNodes), function (item) {
+          container.removeChild(item); //removeChild成功时，会返回被删除的节点
         });
       }
-      if (util.isPlainObject(props)) {
+      if (props && util.isPlainObject(props)) {
         $node = $(dom);
         var key;
         for (key in props) {
-          if (attrMethodList.indexOf(key)> -1) {
+          //TODO
+          if (attrMethodList.indexOf(key)> -1) { //当wood对象包含该属性时，直接调用wood对象对应的方法
             $node[key](props[key]);
           } else {
             $node.attr(key, props[key]);
           }
         }
       }
+      return dom;
     },
-    traverseNode: function (node, callback) {
+    traverseNode: function (node, callback) { //遍历当前节点，及节点内的所有节点，对每个节点执行回调函数
       callback(node);
       for (var i = 0, len = node.childNodes.length; i < len; i++) {
         this.traverseNode(node.childNodes[i], callback);
@@ -256,6 +273,11 @@
     return target;
   };
 
+  /**
+   * 与原生forEach不同，可遍历数组或对象，且可返回数组或对象
+   * @param {Array ! Object} elementList
+   * @param {Function} callback
+   */
   $.each = function (elementList, callback) {
     var i, key;
     if (util.isArrayLike(elementList)) {
@@ -274,19 +296,11 @@
     return elementList;
   };
 
-  $.contains = document.documentElement.contains ?
-    function (parent, node) {
-      return parent !== node && parent.contains(node)
-    } :
-    function (parent, node) {
-      while (node && (node = node.parentNode)) {
-        if (node === parent) {
-          return true;
-        }
-      }
-      return false;
-    };
-
+  /**
+   * 根据callback的返回值，返回新的数组
+   *
+   * @param {Array ! Object} elementList
+   */
   $.map = function (elementList, callback) {
     var item, itemList, i, key;
     if (util.isArrayLike(elementList)) {
@@ -307,21 +321,46 @@
     return itemList;
   };
 
+  /**
+   * 根据css选择器，返回符合规定的节点数组
+   */
   $.filtered = function (nodeList, selector) {
-    return selector === null ? $(nodeList) : $(nodes).filter(selector);
+    return selector === null ? $(nodeList) : $(nodeList).filter(selector);
   };
 
+  /**
+   * 判断某祖先节点下，是否包含某节点
+   */
+  $.contains = document.documentElement.contains ?
+    function (parent, node) {
+      return parent !== node && parent.contains(node)
+    } :
+    function (parent, node) {
+      while (node && (node = node.parentNode)) {
+        if (node === parent) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+  /**
+   * 返回某节点下的所有子节点
+   */
   $.children = function (element) {
     return 'children' in element ?
-        slice.call(element.children) :
+        util.slice.call(element.children) :
         $.map(element.childNodes, function (node) {
           if (node.nodeType === 1) {
               return node;
+          } else {
+            return null;
           }
         });
   };
 
   $.fn = {
+    length: 0,
     constructor: wood.build,
     forEach: util.forEach,
     reduce: util.reduce,
@@ -329,31 +368,30 @@
     sort: util.sort,
     splice: util.splice,
     indexOf: util.indexOf,
-    map: function (callback) {
+    map: function (callback) { //参数为函数
       return $($.map(this, function (item, index) {
         return callback.call(item, index);
       }));
     },
-    each: function (callback) {
+    each: function (callback) { //参数为函数
       util.every.call(this, function (item, index) {
-        return callback.call(item, index) !== false;
+        return callback.call(item, index) !== false; //为false时，跳出遍历
       });
       return this;
     },
-    filter: function (selector) {
+    filter: function (selector) { //参数为函数或css选择器字符串
       if (util.isFunction(selector)) {
-        return this.not(this.not(selector));
+        return this.not(this.not(selector)); //负负得正
       }
       return $(util.filter.call(this, function (item) {
-        return zepto.matches(item, selector);
+        return wood.matches(item, selector);
       }));
     },
-    pluck: function (prop) {
+    pluck: function (prop) { //去掉某属性值为空的元素，pluck 摘取
       return $.map(this, function (element) {
         return element[prop];
       });
     },
-    length: 0,
     ready: function (callback) {
       //需要为IE检测document.body已经存在
       if (regex.ready.test(document.readyState) && document.body) {
@@ -374,8 +412,8 @@
     size: function () {
       return this.length;
     },
-    remove: function (callback) {
-      return this.each(function (item, index) {
+    remove: function () {
+      return this.each(function (item) {
         if (item.parentNode !== null) {
           item.parentNode.removeChild(item);
         }
@@ -384,12 +422,11 @@
     is: function (selector) {
       return this.length > 0 && wood.matches(this[0], selector);
     },
-    not: function (selector) {
+    not: function (selector) { //参数可以是Function，String，Array...，返回值Array
       var nodeList = [];
       if (util.isFunction(selector)) {
-        //TODO
         this.each(function (item) {
-          if (!selector.call(this, item)) {
+          if (!selector.call(item, item)) {
             nodeList.push(item);
           }
         });
@@ -398,11 +435,11 @@
         if (typeof selector === 'string') {
           excludeList = this.filter(selector);
         } else {
-          excludeList = util.isArrayLike(selector) && util.isFunction(selector) ? util.slice(selector) : $(selector);
+          excludeList = util.isArrayLike(selector) && util.isFunction(selector.item) ? util.slice.call(selector) : $(selector);
         }
         this.forEach(function (item) {
-          if (excludeList.indexOf(item) < 0) {
-            nodes.push(item);
+          if (excludeList.indexOf(item) === -1) {
+            nodeList.push(item);
           }
         });
       }
@@ -459,7 +496,7 @@
       var nodeList = this;
       while (nodeList.length > 0) {
         nodeList = $.map(nodeList, function (item) {
-          if ((item = node.parentNode) && !util.isDocument(item) && ancestorList.indexOf(item) === -1) {
+          if ((item = item.parentNode) && !util.isDocument(item) && ancestorList.indexOf(item) === -1) {
             ancestorList.push(item);
             return item;
           }
@@ -691,6 +728,7 @@
     }
   };
 
+  //通过执行wood.init，返回wood对象，该对象的原型为$.fn，因此包含$.fn的所有功能
   wood.build.prototype = wood.model.prototype = $.fn;
   $.wood = wood;
 
