@@ -359,6 +359,56 @@
         });
   };
 
+  $.wrapQueryFunc = function (that, type) {
+    var argType;
+    var nodeList = $.map(arguments, function (item) {
+      argType = util.typeOf(item);
+      return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(item));
+    });
+    var parent;
+    var copyByClone = that.length > 1;
+    if (nodeList.length < 1) {
+      return that;
+    }
+    return function (target) {
+      switch (type) {
+        case 'append':
+            parent = target;
+            target = null;
+          break;
+        case 'prepend':
+            parent = target;
+            target = target.firstChild;
+          break;
+        case 'after':
+            parent = target.parentNode;
+            target = target.nextSibling;
+          break;
+        case 'before':
+            parent = target.parentNode;
+          break;
+        default:
+          console.log('query type is not support!');
+      }
+      var parentInDocument = $.contains(document.documentElement, parent);
+      nodeList.forEach(function (node) {
+        if (copyByClone) {
+          node = node.cloneNode(true);
+        } else if (!parent) {
+          return $(node).remove();
+        }
+        parent.insertBefore(node, target);
+        if (parentInDocument) {
+          wood.traverseNode(node, function (element) {
+            if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
+              window['eval'].call(window, element.innerHTML);
+            }
+          });
+        }
+      });
+    }
+  };
+
   $.fn = {
     length: 0,
     constructor: wood.build,
@@ -544,143 +594,28 @@
       return $(this.pluck('nextElementSibling')).filter(selector || '');
     },
     append: function () {
-      var argType;
-      var nodeList = $.map(arguments, function (item) {
-        argType = util.typeOf(item);
-        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
-      });
-      var parent;
-      var copyByClone = this.length > 1;
-      if (nodeList.length < 1) {
-        return this;
-      }
-      return this.each(function (_, target) {
-        parent = target;
-        target = null;
-        var parentInDocument = $.contains(document.documentElement, parent);
-        nodeList.forEach(function (node) {
-          if (copyByClone) {
-            node = node.cloneNode(true);
-          } else if (!parent) {
-            return $(node).remove();
-          }
-          parent.insertBefore(node, target);
-          if (parentInDocument) {
-            wood.traverseNode(node, function (element) {
-              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
-                window['eval'].call(window, element.innerHTML);
-              }
-            });
-          }
-        });
-      });
+      return this.each($.wrapQueryFunc.call(this, 'append'));
     },
     appendTo: function (html) {
       $(html).append(this);
       return this;
     },
     prepend: function () {
-      var argType;
-      var nodeList = $.map(arguments, function (item) {
-        argType = util.typeOf(item);
-        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
-      });
-      var parent;
-      var copyByClone = this.length > 1;
-      if (nodeList.length < 1) {
-        return this;
-      }
-      return this.each(function (_, target) {
-        parent = target;
-        target = target.firstChild;
-        var parentInDocument = $.contains(document.documentElement, parent);
-        nodeList.forEach(function (node) {
-          if (copyByClone) {
-            node = node.cloneNode(true);
-          } else if (!parent) {
-            return $(node).remove();
-          }
-          parent.insertBefore(node, target);
-          if (parentInDocument) {
-            wood.traverseNode(node, function (element) {
-              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
-                window['eval'].call(window, element.innerHTML);
-              }
-            });
-          }
-        });
-      });
+      return this.each($.wrapQueryFunc.call(this, 'prepend'));
     },
     prependTo: function (html){
       $(html).prepend(this);
       return this;
     },
     after: function () {
-      var argType;
-      var nodeList = $.map(arguments, function (item) {
-        argType = util.typeOf(item);
-        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
-      });
-      var parent;
-      var copyByClone = this.length > 1;
-      if (nodeList.length < 1) {
-        return this;
-      }
-      return this.each(function (_, target) {
-        parent = target.parentNode;
-        target = target.nextSibling;
-        var parentInDocument = $.contains(document.documentElement, parent);
-        nodeList.forEach(function (node) {
-          if (copyByClone) {
-            node = node.cloneNode(true);
-          } else if (!parent) {
-            return $(node).remove();
-          }
-          parent.insertBefore(node, target);
-          if (parentInDocument) {
-            wood.traverseNode(node, function (element) {
-              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
-                window['eval'].call(window, element.innerHTML);
-              }
-            });
-          }
-        });
-      });
+      return this.each($.wrapQueryFunc.call(this, 'after'));
     },
     insertAfter: function (html) {
       $(html).after(this);
       return this;
     },
     before: function () {
-      var argType;
-      var nodeList = $.map(arguments, function (item) {
-        argType = util.typeOf(item);
-        return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(arg));
-      });
-      var parent;
-      var copyByClone = this.length > 1;
-      if (nodeList.length < 1) {
-        return this;
-      }
-      return this.each(function (_, target) {
-        parent = target.parentNode;
-        var parentInDocument = $.contains(document.documentElement, parent);
-        nodeList.forEach(function (node) {
-          if (copyByClone) {
-            node = node.cloneNode(true);
-          } else if (!parent) {
-            return $(node).remove();
-          }
-          parent.insertBefore(node, target);
-          if (parentInDocument) {
-            wood.traverseNode(node, function (element) {
-              if (element.nodeName !== null && element.nodeName.toUpperCase() === 'SCRIPT' && (!element.type || element.type === 'text/javascript' && !element.src)) {
-                window['eval'].call(window, element.innerHTML);
-              }
-            });
-          }
-        });
-      });
+      return this.each($.wrapQueryFunc.call(this, 'before'));
     },
     insertBefore: function (html) {
       $(html).before(this);
