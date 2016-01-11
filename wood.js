@@ -13,6 +13,35 @@
     '*': document.createElement('div')
   };
   var attrMethodList = ['val', 'css', 'html', 'text', 'data', 'width', 'height', 'offset'];
+  var propMap = {
+    'tabindex': 'tabIndex',
+    'readonly': 'readOnly',
+    'for': 'htmlFor',
+    'class': 'className',
+    'maxlength': 'maxLength',
+    'cellspacing': 'cellSpacing',
+    'cellpadding': 'cellPadding',
+    'rowspan': 'rowSpan',
+    'colspan': 'colSpan',
+    'usemap': 'useMap',
+    'frameborder': 'frameBorder',
+    'contenteditable': 'contentEditable'
+  };
+  var deserializeMap = {
+    'true': true,
+    'false': false,
+    'null': null
+  };
+  var cssNumberMap = {
+    'column-count': 1,
+    'columns': 1,
+    'font-weight': 1,
+    'line-height': 1,
+    'opacity': 1,
+    'z-index': 1,
+    'zoom': 1
+  };
+  var classCacheMap = {};
 
   (function () {
     classList.forEach(function (item) {
@@ -25,7 +54,9 @@
     fragment: /^\s*<(\w+|!)[^>]*>/, //<!---->、<div>、<div />...
     singleTag: /^<(\w+\s*\/?)(?:<\/\1>|)$/,  //<div></div>、<br />...
     tagExpander: /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w]+)[^>]*)\/>/ig, //<div />、<a />...
-    ready: /complete|loaded|interactive/
+    ready: /complete|loaded|interactive/,
+    capital: /([A-Z])/g,
+    rootNode: /^(?:body|html)$/i
   };
 
   var util = {
@@ -83,6 +114,40 @@
       return this.filter.call(arr, function (item, index) {
         return arr.indexOf(item) === index;
       });
+    },
+    deserializeValue: function (value) {
+      try {
+        if (value) {
+          if (value in deserializeMap) {
+            return deserializeMap[value];
+          } else if (+value + '' === value) {
+            return +value;
+          } else if (/^[\[\{]/.test(value)) {
+            return JSON.parse(value);
+          }
+        }
+      } catch(e) {
+        return value;
+      }
+    },
+    camelize: function (str) {
+      return str.replace(/-+(.)?/g, function (match, char) {
+        return char ? char.toUpperCase() : '';
+      });
+    },
+    dasherize: function (str) {
+      return str.replace(/::/g, '/')
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+        .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+        .replace(/_/g, '-')
+        .toLowerCase();
+    },
+    isAddPx: function (name, value) {
+      return (typeof value == 'number' && !cssNumberMap[util.dasherize(name)]) ? value + 'px' : value;
+    },
+    classRegex: function (name) {
+      return name in classCacheMap ?
+        classCacheMap[name] : (classCacheMap[name] = new RegExp('(^|\\s)' + name + '(\\s|$)'))
     },
     extend: function (target, source, isDeep) {
       var key;
@@ -500,6 +565,9 @@
         return util.isObject(selector) ? $.contains(this, selector) : $(this).find(selector).size();
       });
     },
+    index: function (element) {
+      return element ? this.indexOf($(element)[0]) : this.parent().children().indexOf(this[0]);
+    },
     eq: function (index) {
       return this.slice(index, + index + 1);
     },
@@ -660,6 +728,299 @@
         var $self = $(this);
         $self.replaceWith($self.children());
       });
+    },
+    html: function (html) {
+      return 0 in arguments ?
+        this.each(function () {
+          $(this).empty().append(html);
+        }) :
+        0 in this ? this[0].innerHTML : null;
+    },
+    text: function (text) {
+      return 0 in arguments ?
+        this.each(function () {
+          this.textContent = text;
+        }) :
+        0 in this ? this.pluck['textContent'].join('') : null;
+    },
+    show: function () {
+      return this.each(function () {
+        this.style.display = 'block';
+      });
+    },
+    hide: function () {
+      return this.each(function () {
+        this.style.display = 'none';
+      });
+    },
+    attr: function (name, value) {
+      var result;
+      if (typeof name === 'string' && typeof value === undefined) {
+        result = this[0].getAttribute(name);
+        return !result && name in this[0] ? this[0][name] : result;
+      } else {
+        this.each(function () {
+          if (this.nodeType !== 1) {
+            return ;
+          }
+          if (util.isObject(name)) {
+            for (var key in name) {
+              return this.setAttribute(key, name[key]);
+            }
+          } else {
+            return this.setAttribute(name, value);
+          }
+        });
+      }
+    },
+    removeAttr: function (name) {
+      return this.each(function () {
+        var self = this;
+        if (self.nodeType === 1 && name) {
+          name.split(' ').forEach(function (item) {
+            self.removeAttribute(item);
+          });
+        }
+      });
+    },
+    prop: function (name, value) {
+      name = propMap[name] || name;
+      return (typeof value !== undefined) ?
+        this.each(function () {
+          this[name] = value;
+        }) :
+        (this[0] && this[0].name);
+    },
+    data: function (name, value) {
+      var attrName = 'data-' + name.replace(regex.capital, '-$1').toLowerCase();
+      var data = typeof value !== undefined ? this.setAttribute(attrName, value) : this.getAttribute(attrName);
+      return data !== null ? util.deserializeValue(data) : undefined;
+    },
+    val: function (value) {
+      if (typeof value !== undefined) {
+        this.each(function () {
+          return this.value = value;
+        })
+      } else {
+        if (this[0] && this[0].multiple) {
+          $(this[0]).find('option').filter(function () {
+            return this.selected;
+          }).pluck('value');
+        } else {
+          return this[0].value;
+        }
+      }
+    },
+    offsetParent: function () {
+      return this.map(function () {
+        //offsetParent，是浏览器原生属性，当容器元素的style.display被设置为"none"时（注：IE和Opera除外），offsetParent属性 返回 null
+        var parent = this.offsetParent || document.body;
+        while (parent && !regex.rootNode.test(parent.nodeName) && $(parent).css('position') === 'static') {
+          parent = parent.offsetParent;
+        }
+        return parent;
+      });
+    },
+    offset: function (coords) {
+      if (coords) {
+        return this.each(function (index) {
+          var $this = $(this);
+          var parentOffset = $this.offsetParent().offset();
+          var propsMap = {
+            top: coords.top - parentOffset.top,
+            left: coords.left - parentOffset.left
+          };
+          if ($this.css('position' === 'static')) {
+            propsMap['position'] = 'relative';
+          }
+          $this.css(propsMap);
+        });
+      }
+      if (!this.length) {
+        return null;
+      }
+      if (!$.contains(document.documentElement, this[0])) {
+        return {top: 0, left: 0};
+      }
+      var obj = this[0].getBoundingClientRect();
+      return {
+        left: obj.left + window.pageXOffset,
+        top: obj.top + window.pageYOffset,
+        width: Math.round(obj.width),
+        height: Math.round(obj.height)
+      };
+    },
+    position: function () {
+      if (!this.length) {
+        return;
+      }
+      var element = this[0];
+      var offsetParent = this.offsetParent();
+      var offset = this.offset();
+      var parentOffset = util.rootNode.test(offsetParent[0].nodeName) ? {top: 0, left: 0} : offsetParent.offset();
+      offset.top -= parseFloat($(element).css('margin-top')) || 0;
+      offset.left -= parseFloat($(element).css('margin-left')) || 0;
+      parentOffset.top += parseFloat($(offsetParent[0]).css('border-top-width')) || 0;
+      parentOffset.left += parseFloat($(offsetParent[0]).css('border-left-width')) || 0;
+      return {
+        top: offset.top - parentOffset.top,
+        left: offset.left - parentOffset.left
+      };
+    },
+    scrollTop: function (value) {
+      if (!this.length) {
+        return;
+      }
+      var hasScrollTop = 'scrollTop' in this[0];
+      if (value === undefined) {
+        return hasScrollTop ? this[0].scrollTop : this[0].pageYOffset;
+      }
+      if (hasScrollTop) {
+        return this.each(function () {
+          this.scrollTop = value;
+        });
+      } else {
+        return this.each(function () {
+          this.scrollTo(this.scrollX, value);
+        });
+      }
+    },
+    scrollLeft: function (value) {
+      if (!this.length) {
+        return;
+      }
+      var hasScrollLeft = 'scrollLeft' in this[0];
+      if (value === undefined) {
+        return hasScrollLeft ? this[0].scrollLeft : this[0].pageXOffset;
+      }
+      if (hasScrollLeft) {
+        return this.each(function () {
+          this.scrollLeft = value;
+        });
+      } else {
+        return this.each(function () {
+          this.scrollTo(value, this.scrollY);
+        });
+      }
+    },
+    css: function (prop, value) {
+      if (typeof value === undefined) {
+        var computedStyle;
+        var element = this[0];
+        if (!element) {
+          return ;
+        }
+        computedStyle = getComputedStyle(element, '');
+        if (typeof prop === 'string') {
+          return element.style[util.camelize(prop)] || computedStyle.getPropertyValue(prop);
+        } else if (util.isArray(prop)) {
+          var props = {};
+          $.each(prop, function (item) {
+            props[item] = element.style[util.camelize(prop)] || computedStyle.getPropertyValue(prop);
+          });
+          return props;
+        }
+      }
+      var css = '';
+      if (typeof prop === 'string') {
+        if(!value && value !== 0) {
+          this.each(function (item) {
+            item.style.removeProperty(util.dasherize(prop));
+          })
+        } else {
+          css = util.dasherize(prop) + ':' + util.isAddPx(prop, value);
+        }
+      } else {
+        for (var key in prop) {
+          if (!prop[key] && prop[key] !== 0) {
+            this.each(function () {
+              this.style.removeProperty(util.dasherize(key));
+            });
+          } else {
+            css += util.dasherize(key) + ':' + util.isAddPx(key, prop[key]) + ';';
+          }
+        }
+      }
+      return this.each(function () {
+        this.style.cssText += ';' + css;
+      });
+    },
+    hasClass: function (name) {
+      if (!name) {
+        return false;
+      }
+      return util.some.call(this, function () {
+        return this.test(name);
+      }, util.classRegex(name));
+    },
+    addClass: function (name) {
+      if (!name) {
+        return this;
+      }
+      return this.each(function () {
+        if (!('className' in this)) {
+          return;
+        }
+        classList = [];
+        var prevClass = this.className;
+        var newName = name;
+        newName.split(/\s+/g).forEach(function (item) {
+          if (!$(this).hasClass(item)) {
+            classList.push(item);
+          }
+        }, this);
+        if (classList.length) {
+          this.className = prevClass + (prevClass ? ' ' : '') + classList.join('');
+        }
+      });
+    },
+    removeClass: function (name) {
+      return this.each(function () {
+        if (!('className' in this)) {
+          return;
+        }
+        if (name === undefined) {
+          return this.className = '';
+        }
+        var tempClass = this.ClassName;
+        classList = tempClass.split(/\s+/g);
+        classList.forEach(function (item) {
+          tempClass = tempClass.replace(util.classRegex(item), ' ');
+        });
+        this.className = tempClass.trim();
+      });
+    },
+    width: function (value) {
+      var offset;
+      var element = this[0];
+      if (value === undefined) {
+        if (util.isWindow(element)) {
+          return element.innerWidth;
+        } else {
+          return util.isDocument(element) ? element.documentElement.scrollWidth : (offset = this.offset()) && offset.width;
+        }
+      } else {
+        return this.each(function () {
+          element = $(this);
+          element.css('width', value);
+        });
+      }
+    },
+    height: function (value) {
+      var offset;
+      var element = this[0];
+      if (value === undefined) {
+        if (util.isWindow(element)) {
+          return element.innerHeight;
+        } else {
+          return util.isDocument(element) ? element.documentElement.scrollHeight : (offset = this.offset()) && offset.height;
+        }
+      } else {
+        return this.each(function () {
+          element = $(this);
+          element.css('height', value);
+        });
+      }
     }
   };
 
