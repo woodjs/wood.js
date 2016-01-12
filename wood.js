@@ -340,7 +340,7 @@
 
   /**
    * 与原生forEach不同，可遍历数组或对象，且可返回数组或对象
-   * @param {Array ! Object} elementList
+   * @param {Array | Object} elementList
    * @param {Function} callback
    */
   $.each = function (elementList, callback) {
@@ -364,11 +364,12 @@
   /**
    * 根据callback的返回值，返回新的数组
    *
-   * @param {Array ! Object} elementList
+   * @param {Array | Object} elementList
    */
   $.map = function (elementList, callback) {
-    var item, itemList, i, key;
-    if (util.isArrayLike(elementList)) {
+    var item, i, key;
+    var itemList = [];
+      if (util.isArrayLike(elementList)) {
       for (i = 0; i < elementList.length; i++) {
         item = callback(elementList[i], i);
         if (item !== null) {
@@ -426,9 +427,9 @@
 
   $.wrapQueryFunc = function (that, type) {
     var argType;
-    var nodeList = $.map(arguments, function (item) {
+    var nodeList = $.map(that, function (item) {
       argType = util.typeOf(item);
-      return argType === 'object' || argType === 'array' || (item === null ? item : wood.fragment(item));
+      return argType === 'object' || argType === 'array' || item === null ? item : wood.fragment(item);
     });
     var parent;
     var copyByClone = that.length > 1;
@@ -490,7 +491,7 @@
     },
     each: function (callback) { //参数为函数
       util.every.call(this, function (item, index) {
-        return callback.call(item, index) !== false; //为false时，跳出遍历
+        return callback.call(item, item, index) !== false; //为false时，跳出遍历
       });
       return this;
     },
@@ -662,28 +663,28 @@
       return $(this.pluck('nextElementSibling')).filter(selector || '');
     },
     append: function () {
-      return this.each($.wrapQueryFunc.call(this, 'append'));
+      return this.each($.wrapQueryFunc.call(this, this, 'append'));
     },
     appendTo: function (html) {
       $(html).append(this);
       return this;
     },
     prepend: function () {
-      return this.each($.wrapQueryFunc.call(this, 'prepend'));
+      return this.each($.wrapQueryFunc.call(this, this, 'prepend'));
     },
     prependTo: function (html){
       $(html).prepend(this);
       return this;
     },
     after: function () {
-      return this.each($.wrapQueryFunc.call(this, 'after'));
+      return this.each($.wrapQueryFunc.call(this, this, 'after'));
     },
     insertAfter: function (html) {
       $(html).after(this);
       return this;
     },
     before: function () {
-      return this.each($.wrapQueryFunc.call(this, 'before'));
+      return this.each($.wrapQueryFunc.call(this, this, 'before'));
     },
     insertBefore: function (html) {
       $(html).before(this);
